@@ -1,0 +1,6 @@
+{
+    "board": "arduino:mbed_nano:nano33ble",
+    "programmer": "arduino:cmsis-dap",
+    "sketch": "SmartSight.ino",
+    "port": "/dev/ttyACM1"
+}

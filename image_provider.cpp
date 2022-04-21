@@ -81,8 +81,8 @@ TfLiteStatus InitCamera(tflite::ErrorReporter* error_reporter) {
   // a resolution smaller than the full sensor frame
   myCAM.set_format(JPEG);
   myCAM.InitCAM();
-  // Specify the smallest possible resolution
-  myCAM.OV2640_set_JPEG_size(OV2640_160x120);
+  // Store Large Image in FIFO buffer parsing.
+  myCAM.OV2640_set_JPEG_size(OV2640_176x144);
   delay(100);
   return kTfLiteOk;
 }
@@ -137,7 +137,7 @@ TfLiteStatus DecodeAndProcessImage(tflite::ErrorReporter* error_reporter,
                                    int image_width, int image_height,
                                    int8_t* image_data) {
   TF_LITE_REPORT_ERROR(error_reporter,
-                       "Decoding JPEG and converting to greyscale");
+                       "Decoding JPEG and converting to RGB");
   // Parse the JPEG headers. The image will be decoded as a sequence of Minimum
   // Coded Units (MCUs), which are 16x8 blocks of pixels.
   JpegDec.decodeArray(jpeg_buffer, jpeg_length);
@@ -202,18 +202,19 @@ TfLiteStatus DecodeAndProcessImage(tflite::ErrorReporter* error_reporter,
         r = ((color & 0xF800) >> 11) * 8;
         g = ((color & 0x07E0) >> 5) * 4;
         b = ((color & 0x001F) >> 0) * 8;
-        // Convert to grayscale by calculating luminance
-        // See https://en.wikipedia.org/wiki/Grayscale for magic numbers
-        float gray_value = (0.2126 * r) + (0.7152 * g) + (0.0722 * b);
-
-        // Convert to signed 8-bit integer by subtracting 128.
-        gray_value -= 128;
+        float r_float = 1.0*r - 128;
+        float g_float = 1.0*g - 128;
+        float b_float = 1.0*b - 128;
 
         // The x coordinate of this pixel in the output image
         int current_x = x_origin + mcu_col;
-        // The index of this pixel in our flat output buffer
-        int index = (current_y * image_width) + current_x;
-        image_data[index] = static_cast<int8_t>(gray_value);
+        // The starting index of this pixel in our flat output buffer
+        int index = ((current_y * image_width) + current_x)*3;
+
+        image_data[index] = static_cast<int8_t>(255);
+        image_data[index+1] = static_cast<int8_t>(0);
+        image_data[index+2] = static_cast<int8_t>(0);
+        
       }
     }
   }

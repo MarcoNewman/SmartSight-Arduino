@@ -6,7 +6,10 @@
 #ifndef MODEL_DATA_H_
 #define MODEL_DATA_H_
 
-extern const unsigned char g_person_detect_model_data[];
-extern const int g_person_detect_model_data_len;
+extern const unsigned char g_mediapipe_model_data[];
+extern const int g_mediapipe_model_data_len;
+
+extern const unsigned char g_mobilenet_model_data[];
+extern const int g_mobilenet_model_data_len;
 
 #endif

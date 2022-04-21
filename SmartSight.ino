@@ -22,98 +22,199 @@ limitations under the License.
 #include "model_settings.h"
 #include "models.h"
 #include "tensorflow/lite/micro/all_ops_resolver.h"
+#include "tensorflow/lite/micro/micro_error_reporter.h"
 #include "tensorflow/lite/micro/micro_interpreter.h"
-#include "tensorflow/lite/micro/micro_mutable_op_resolver.h"
 #include "tensorflow/lite/schema/schema_generated.h"
 #include "tensorflow/lite/version.h"
 
+#include "tensorflow/lite/micro/testing/micro_test.h"
+
 // Globals, used for compatibility with Arduino-style sketches.
 namespace {
-  int run = 0;
+  const int HANDSHAKE = 0;
+  const int ON_REQUEST = 1;
+  const int STREAM = 2;
+  const int STATUS = 3;
+  const int GET_128x128_IMAGE = 4;
+  const int STREAM_128x128_IMAGE = 5;
+  const int DETECT_FACE = 6;
+  //const int GET_192x192_IMAGE = 4;
+  //const int STREAM_192x192_FACE = 5;
+  //const int COMPUTE_ACTIVATIONS = 6;
+  //const int STREAM_ACTIVATIONS = 7;
+  //const int TRAIN_CLASS_1 = 8;
+  //const int TRAIN_CLASS_2 = 9;
+  //const int CLASSIFY = 10;
+
+  int mode = ON_REQUEST;
+  // Default time between stream acquisition is 10 ms
+  int streamDelay = 1;
+  // String to store input of delay
+  String delayStr;
+  // Keep track of last data acquistion for delays
+  unsigned long timeOfLastPxStream = 0;
+  // Keep track of image pixel index
+  int x = 0;
+  int y = 0;
 
   tflite::ErrorReporter* error_reporter = nullptr;
-  const tflite::Model* model = nullptr;
-  tflite::MicroInterpreter* interpreter = nullptr;
-  TfLiteTensor* input = nullptr;
+  
+  // MEDIAPIPE
+  const tflite::Model* model_mediapipe = nullptr;
+  tflite::MicroInterpreter* interpreter_mediapipe = nullptr;
+  TfLiteTensor* image_mediapipe = nullptr;
+  TfLiteTensor* boxes_mediapipe = nullptr;
+  TfLiteTensor* scores_mediapipe = nullptr;
+  constexpr int kImageSize_mediapipe = 128*128*3; //float32
+  constexpr int kBoxesSize_mediapipe = 896*16;    //float32
+  constexpr int kScoresSize_mediapipe = 896;      //float32
+  constexpr int kTensorArenaSize_mediapipe = kImageSize_mediapipe+kBoxesSize_mediapipe+kScoresSize_mediapipe;
+  constexpr int size = 150000;
+  uint8_t tensor_arena_mediapipe[size];
 
-  // An area of memory to use for input, output, and intermediate arrays.
-  constexpr int kTensorArenaSize = 136 * 1024;
-  static uint8_t tensor_arena[kTensorArenaSize];
 }  // namespace
 
 // The name of this function is important for Arduino compatibility.
 void setup() {
-  Serial.begin(9600);
-  Serial.println("BEGIN");
-
+  
+  Serial.begin(115200);
+  while (!Serial) ;
   // Set up logging. Google style is to avoid globals or statics because of
   // lifetime uncertainty, but since this has a trivial destructor it's okay.
   // NOLINTNEXTLINE(runtime-global-variables)
+  Serial.println("STARTING MODEL CONFIG");
   static tflite::MicroErrorReporter micro_error_reporter;
   error_reporter = &micro_error_reporter;
 
   // Map the model into a usable data structure. This doesn't involve any
   // copying or parsing, it's a very lightweight operation.
-  model = tflite::GetModel(g_person_detect_model_data);
-  if (model->version() != TFLITE_SCHEMA_VERSION) {
+  model_mediapipe = tflite::GetModel(g_mobilenet_model_data);
+  if (model_mediapipe->version() != TFLITE_SCHEMA_VERSION) {
     TF_LITE_REPORT_ERROR(error_reporter,
                          "Model provided is schema version %d not equal "
                          "to supported version %d.",
-                         model->version(), TFLITE_SCHEMA_VERSION);
+                         model_mediapipe->version(), TFLITE_SCHEMA_VERSION);
     return;
   }
+  Serial.println("MODEL LOADED");
 
-  // Pull in only the operation implementations we need.
-  // This relies on a complete list of all the ops needed by this graph.
-  // An easier approach is to just use the AllOpsResolver, but this will
-  // incur some penalty in code space for op implementations that are not
-  // needed by this graph.
-  //
-  // tflite::AllOpsResolver resolver;
-  // NOLINTNEXTLINE(runtime-global-variables)
+  // Pull in all TFLite operations
   static tflite::AllOpsResolver resolver;
 
   // Build an interpreter to run the model with.
   // NOLINTNEXTLINE(runtime-global-variables)
-  static tflite::MicroInterpreter static_interpreter(
-      model, resolver, tensor_arena, kTensorArenaSize, error_reporter);
-  interpreter = &static_interpreter;
+  static tflite::MicroInterpreter static_interpreter_mediapipe( 
+    model_mediapipe,
+    resolver,
+    tensor_arena_mediapipe, size,
+    error_reporter
+  );
+  interpreter_mediapipe = &static_interpreter_mediapipe;
 
   // Allocate memory from the tensor_arena for the model's tensors.
-  TfLiteStatus allocate_status = interpreter->AllocateTensors();
+  TfLiteStatus allocate_status = interpreter_mediapipe->AllocateTensors();
   if (allocate_status != kTfLiteOk) {
     TF_LITE_REPORT_ERROR(error_reporter, "AllocateTensors() failed");
     return;
   }
+  TfLiteStatus reset_status = interpreter_mediapipe->ResetVariableTensors();
+  if (reset_status != kTfLiteOk) {
+    TF_LITE_REPORT_ERROR(error_reporter, "ResetVariableTensors() failed");
+    return;
+  }
+  Serial.println("TENSORS ALLOCATED");
 
   // Get information about the memory area to use for the model's input.
-  input = interpreter->input(0);
+  image_mediapipe = interpreter_mediapipe->input(0);
+  boxes_mediapipe = interpreter_mediapipe->output(0);
+  scores_mediapipe = interpreter_mediapipe->output(1);
+  Serial.println("Finished Setup");
 }
 
 // The name of this function is important for Arduino compatibility.
 void loop() {
+  // If we're streaming
+  if (mode == STREAM) {
+    if (millis() - timeOfLastPxStream >= streamDelay && x < 128) {
+      int index = (x * 128) + y;
+      int8_t rgb[3];
+      rgb[0] = image_mediapipe->data.int8[index];
+      rgb[1] = image_mediapipe->data.int8[index+1];
+      rgb[2] = image_mediapipe->data.int8[index+2];
+      String outstr = String(String(rgb[0], DEC)+","+String(rgb[1], DEC)+","+String(rgb[2], DEC));
+      Serial.println(outstr);
+      if (++y == 128){
+        y = 0;
+        x++;
+      }
+
+      timeOfLastPxStream =  millis();
+    }
+  }
+
   if (Serial.available() > 0) {    // is a character available?
-    run = Serial.read();       // get the character
-    if (run){
-      // Get image from provider.
-      if (kTfLiteOk != GetImage(error_reporter, kNumCols, kNumRows, kNumChannels,
-                                input->data.int8)) {
-        TF_LITE_REPORT_ERROR(error_reporter, "Image capture failed.");
-      }
+    int inByte = Serial.read();       // get the character
+    switch (inByte){
+      case HANDSHAKE:
+        Serial.println("Message received.");
+        break;
+      case ON_REQUEST:
+        mode = ON_REQUEST;
+        x = 0;
+        y = 0;
+        break;
+      case STREAM:
+        x = 0;
+        y = 0;
+        mode = STREAM;
+        break;
+      case STATUS:
+        // get some info
+        Serial.println("Model Info:");
+        Serial.println(model_mediapipe->version());
+        Serial.println(interpreter_mediapipe->arena_used_bytes());
+        Serial.println(interpreter_mediapipe->initialization_status());
+        Serial.println(interpreter_mediapipe->inputs_size());
+        Serial.println(interpreter_mediapipe->outputs_size());
+        Serial.println(interpreter_mediapipe->tensors_size());
+        Serial.print("Number of dimensions: ");
+        Serial.println(boxes_mediapipe->dims->size,DEC);
+        Serial.print("Dim 1 size: ");
+        Serial.println(boxes_mediapipe->dims->data[0],DEC);
+        Serial.print("Dim 2 size: ");
+        Serial.println(boxes_mediapipe->dims->data[1],DEC);
+        Serial.print("Dim 3 size: ");
+        Serial.println(boxes_mediapipe->dims->data[2],DEC);
+        Serial.print("Dim 4 size: ");
+        Serial.println(boxes_mediapipe->dims->data[3],DEC);
+        Serial.print("Type: ");
+        Serial.println(boxes_mediapipe->type,DEC);
+        
 
-      // Run the model on this input and make sure it succeeds.
-      if (kTfLiteOk != interpreter->Invoke()) {
-        TF_LITE_REPORT_ERROR(error_reporter, "Invoke failed.");
-      }
+        break;
 
-      TfLiteTensor* output = interpreter->output(0);
+      case GET_128x128_IMAGE:
+        // Get image from provider.
+        if (kTfLiteOk != GetImage(error_reporter, kCols_mediapipe, kRows_mediapipe, kChannels_mediapipe,
+                                  image_mediapipe->data.int8)) {
+          TF_LITE_REPORT_ERROR(error_reporter, "Image capture failed.");
+        }
+        break;
+      case DETECT_FACE:
+        // Run the model on this input and make sure it succeeds.
+        if (kTfLiteOk != interpreter_mediapipe->Invoke()) {
+          TF_LITE_REPORT_ERROR(error_reporter, "Invoke failed.");
+        }
+        const float* raw_boxes = boxes_mediapipe->data.f;
+        const float* raw_scores = scores_mediapipe->data.f;
+        break;
+      //case TRAIN_CLASS_1:
+        // Process the inference results.
+        //int8_t person_score = output->data.uint8[kPersonIndex];
+        //int8_t no_person_score = output->data.uint8[kNotAPersonIndex];
+        //RespondToDetection(error_reporter, person_score, no_person_score); //KNN STUFF
 
-      // Process the inference results.
-      int8_t person_score = output->data.uint8[kPersonIndex];
-      int8_t no_person_score = output->data.uint8[kNotAPersonIndex];
-      RespondToDetection(error_reporter, person_score, no_person_score);
-
-      run = 0;
+        //break;
     }
   }
 }

@@ -4,17 +4,23 @@
 // Keeping these as constant expressions allow us to allocate fixed-sized arrays
 // on the stack for our working memory.
 
-// All of these values are derived from the values used during model training,
-// if you change your model you'll need to update these constants.
-constexpr int kNumCols = 96;
-constexpr int kNumRows = 96;
-constexpr int kNumChannels = 1;
+// MEDIAPIPE SETTINGS
+// input
+constexpr int kCols_mediapipe = 128;
+constexpr int kRows_mediapipe = 128;
+constexpr int kChannels_mediapipe = 3;
+constexpr int kImageSize_mediapipe = kCols_mediapipe * kRows_mediapipe * kChannels_mediapipe;
 
-constexpr int kMaxImageSize = kNumCols * kNumRows * kNumChannels;
+// output
+constexpr int kBoxes_mediapipe = 896;
+constexpr int kAnchorsSize_mediapipe = kBoxes_mediapipe * 2;
+extern const float kAnchors_mediapipe[kAnchorsSize_mediapipe];
 
+
+// MOBILENET
 constexpr int kCategoryCount = 2;
 constexpr int kPersonIndex = 1;
 constexpr int kNotAPersonIndex = 0;
 extern const char* kCategoryLabels[kCategoryCount];
 
-#endif  MODEL_SETTINGS_H_
+#endif // MODEL_SETTINGS_H_

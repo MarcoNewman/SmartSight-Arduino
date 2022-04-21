@@ -4,6 +4,8 @@
         "string_view": "cpp",
         "initializer_list": "cpp",
         "utility": "cpp",
-        "string": "cpp"
+        "string": "cpp",
+        "cmath": "cpp",
+        "*.tcc": "cpp"
     }
 }

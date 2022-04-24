@@ -6,6 +6,7 @@
         "utility": "cpp",
         "string": "cpp",
         "cmath": "cpp",
-        "*.tcc": "cpp"
+        "*.tcc": "cpp",
+        "map": "cpp"
     }
 }

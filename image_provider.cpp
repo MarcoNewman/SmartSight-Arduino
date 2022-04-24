@@ -156,6 +156,7 @@ uint32_t GetImage(tflite::ErrorReporter* error_reporter, uint8_t* image_data) {
   TfLiteStatus read_data_status = ReadData(error_reporter, image_data);
   if (read_data_status != kTfLiteOk) {
     TF_LITE_REPORT_ERROR(error_reporter, "ReadData failed");
+    return 0;
   }
 
   return jpeg_length;

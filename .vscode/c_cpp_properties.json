@@ -12,6 +12,7 @@
                 "/home/marco/.arduino15/packages/arduino/hardware/mbed_nano/3.0.1/cores/arduino",
                 "/home/marco/.arduino15/packages/arduino/hardware/mbed_nano/3.0.1/variants/ARDUINO_NANO33BLE",
                 "/home/marco/Arduino/libraries/Arduino_TensorFlowLite/src",
+                "/home/marco/Arduino/libraries/Arduino_KNN/src",
                 "/home/marco/.arduino15/packages/arduino/hardware/mbed_nano/3.0.1/libraries/SPI",
                 "/home/marco/.arduino15/packages/arduino/hardware/mbed_nano/3.0.1/libraries/Wire",
                 "/home/marco/Arduino/libraries/ArduCAM",

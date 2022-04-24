@@ -17,23 +17,27 @@ limitations under the License.
 #include <TensorFlowLite.h>
 #include "tensorflow/lite/micro/micro_error_reporter.h"
 
+#include <Arduino_KNN.h>
+
 #include "image_provider.h"
 
 // Globals, used for compatibility with Arduino-style sketches.
 namespace {
   const int HANDSHAKE = 0;
+  // MODES
   const int ON_REQUEST = 1;
   const int STREAM_IMAGE = 2;
-  const int STATUS = 3;
-  const int CAPTURE_IMAGE = 4;
-  const int STREAM_LOGITS = 5;
-  //const int GET_192x192_IMAGE = 4;
-  //const int STREAM_IMAGE_192x192_FACE = 5;
-  //const int COMPUTE_ACTIVATIONS = 6;
-  //const int STREAM_IMAGE_ACTIVATIONS = 7;
-  //const int TRAIN_CLASS_1 = 8;
-  //const int TRAIN_CLASS_2 = 9;
-  //const int CLASSIFY = 10;
+  const int STREAM_LOGITS = 3;
+
+  // CONTROLS
+  const int INITIALIZE = 4;
+  const int CAPTURE_IMAGE = 5;
+  const int FACE_DETECTED = 6;
+  const int FACE_NOT_DETECTED = 7;
+
+  const int TRAIN_1 = 8;
+  const int TRAIN_2 = 9;
+  const int CLASSIFY = 10;
 
   int mode = ON_REQUEST;
 
@@ -41,6 +45,7 @@ namespace {
   tflite::ErrorReporter* error_reporter = nullptr;
   
   // RGB IMAGE BUFFERING
+  int camera_status = 0;
   constexpr int img_size = 240;
   // constexpr int kImageSize_mediapipe = img_size*img_size*3;
   // uint8_t image[kImageSize_mediapipe];
@@ -52,20 +57,31 @@ namespace {
   // Keep track of datastream chunk
   int x = 0;
 
-  uint8_t logits[1001];
+  int i = 0;
+  int logits_i = 0;
+  int buffer_i;
+  float logits[250];
+  uint8_t buffer[4];
+  
+  
 
   // TODO: CONTROL BUTTONS/REVERSE SERIAL CONTROL/ADD KNN CLASSIFIER
   // trainButton
   // classifyButton
   // scrollupClassifier
   // scrolldownClassifier
+  const int INPUTS = 250;
+  const int CLASSES = 3; 
+  const int EXAMPLES_PER_CLASS = 5;
+
+  KNNClassifier KNN(250);
 
 }  // namespace
 
 // The name of this function is important for Arduino compatibility.
 void setup() {
   
-  Serial.begin(115200);
+  Serial.begin(250000);
   while (!Serial) ;
   // Set up logging. Google style is to avoid globals or statics because of
   // lifetime uncertainty, but since this has a trivial destructor it's okay.
@@ -96,53 +112,83 @@ void loop() {
     }
   }
   if (mode == STREAM_LOGITS) {
-    int i = 0;
-    while (i < 1001){
-      if (Serial.available() > 0) {
-        logits[i] = Serial.read();
-        i++;
+    if (Serial.available() > 0) {
+      buffer_i = i % 4;
+      buffer[buffer_i] = Serial.read();
+      if (buffer_i == 3 && logits_i < 250){
+        logits[logits_i] = (buffer[0]<<24)|(buffer[1]<<16)|(buffer[2]<<8)|(buffer[3]);
+        logits_i++;
       }
+      i++;
     }
-    Serial.print("logit 999: ");
-    Serial.println(logits[999]);
-    mode = ON_REQUEST;
+    if (i == 1000){
+      Serial.println("Logits Received");
+      mode = ON_REQUEST;
+    }
   }
 
   // STATE MANAGEMENT
-  if (Serial.available() > 0) {    // is a character available?
+  if (Serial.available() > 0 && mode != STREAM_LOGITS && mode != STREAM_LOGITS) {    // is a character available?
     int inByte = Serial.read();       // get the character
     switch (inByte){
       case HANDSHAKE:
+        mode = ON_REQUEST;
         Serial.println("Message received.");
         break;
+      
+      // MODES
       case ON_REQUEST:
         mode = ON_REQUEST;
         x = 0;
         break;
-      case STREAM_IMAGE:
-        x = 0;
-        mode = STREAM_IMAGE;
-        break;
-      case STREAM_LOGITS: // DO THIS NEXT!!
-        x = 0;
-        mode = STREAM_LOGITS;
-        break;
-      case STATUS:
-        // get some info
-        Serial.println(jpeg_length, DEC);
-        break;
+      
+      // ACTIONS/RESPONSES
       case CAPTURE_IMAGE:
         // Get image from provider.
-        jpeg_length = GetImage(error_reporter, img_size, img_size, 3, jpeg_buffer);
-        chunks = floor(jpeg_length/1000);
+        if (camera_status == 0){
+          jpeg_length = GetImage(error_reporter, jpeg_buffer);
+          chunks = floor(jpeg_length/1000);
+          x = 0;
+          mode = STREAM_IMAGE;
+        } else {
+          Serial.println("Camera Not Initialized");
+        }
         break;
-      //case TRAIN_CLASS_1:
-        // Process the inference results.
-        //int8_t person_score = output->data.uint8[kPersonIndex];
-        //int8_t no_person_score = output->data.uint8[kNotAPersonIndex];
-        //RespondToDetection(error_reporter, person_score, no_person_score); //KNN STUFF
-
-        //break;
+      case FACE_DETECTED:
+        // TOGGLE LEDS
+        i = 0;
+        logits_i = 0;
+        mode = STREAM_LOGITS;
+        break;
+      case FACE_NOT_DETECTED:
+        // TOGGLE LEDS
+        Serial.println("No Face Detected");
+        break;
+      
+      // CONTROL
+      case INITIALIZE:
+        camera_status = InitializeCamera(error_reporter);
+        if (camera_status == 0){
+          Serial.println("Camera Initialized");
+        } else {
+          Serial.println("Camera Not Initialized");
+        }
+        break;
+      case TRAIN_1:
+        KNN.addExample(logits, 0);
+        Serial.print("Example added for class: ");
+        Serial.println(0);
+        break;
+      case TRAIN_2:
+        KNN.addExample(logits, 1);
+        Serial.print("Example added for class: ");
+        Serial.println(1);
+        break;
+      case CLASSIFY:
+        int classification = KNN.classify(logits,2);
+        Serial.print("Classification Success:");
+        Serial.println(classification);
+        break;
     }
   }
 }

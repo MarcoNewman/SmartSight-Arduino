@@ -2,5 +2,5 @@
     "board": "arduino:mbed_nano:nano33ble",
     "programmer": "arduino:stlink",
     "sketch": "SmartSight.ino",
-    "port": "/dev/ttyACM4"
+    "port": "/dev/ttyACM3"
 }

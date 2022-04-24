@@ -50,6 +50,8 @@ ArduCAM myCAM(OV2640, CS);
 // Length of the JPEG data currently in the buffer
 uint32_t jpeg_length = 0;
 
+bool cameraInitialized = false;
+
 // Get the camera module ready
 TfLiteStatus InitCamera(tflite::ErrorReporter* error_reporter) {
   TF_LITE_REPORT_ERROR(error_reporter, "Attempting to start Arducam");
@@ -129,37 +131,32 @@ TfLiteStatus ReadData(tflite::ErrorReporter* error_reporter, uint8_t* jpeg_buffe
   return kTfLiteOk;
 }
 
-// Get an image from the camera module
-uint32_t GetImage(tflite::ErrorReporter* error_reporter, int image_width,
-                      int image_height, int channels, uint8_t* image_data) {
-  static bool g_is_camera_initialized = false;
-  if (!g_is_camera_initialized) {
+
+int InitializeCamera(tflite::ErrorReporter* error_reporter){
+  if (!cameraInitialized){
     TfLiteStatus init_status = InitCamera(error_reporter);
     if (init_status != kTfLiteOk) {
       TF_LITE_REPORT_ERROR(error_reporter, "InitCamera failed");
-      return init_status;
+      return 1;
     }
-    g_is_camera_initialized = true;
+  } else {
+    return 1;
   }
+  return 0;
+}
+
+// Get an image from the camera module
+uint32_t GetImage(tflite::ErrorReporter* error_reporter, uint8_t* image_data) {
 
   TfLiteStatus capture_status = PerformCapture(error_reporter);
   if (capture_status != kTfLiteOk) {
     TF_LITE_REPORT_ERROR(error_reporter, "PerformCapture failed");
-    return capture_status;
   }
 
   TfLiteStatus read_data_status = ReadData(error_reporter, image_data);
   if (read_data_status != kTfLiteOk) {
     TF_LITE_REPORT_ERROR(error_reporter, "ReadData failed");
-    return read_data_status;
   }
-
-  // TfLiteStatus decode_status = DecodeAndProcessImage(
-  //     error_reporter, image_width, image_height, image_data);
-  // if (decode_status != kTfLiteOk) {
-  //   TF_LITE_REPORT_ERROR(error_reporter, "DecodeAndProcessImage failed");
-  //   return decode_status;
-  // }
 
   return jpeg_length;
 }

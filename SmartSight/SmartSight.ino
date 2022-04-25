@@ -1,17 +1,3 @@
-/* Copyright 2019 The TensorFlow Authors. All Rights Reserved.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-==============================================================================*/
 #include "main_functions.h"
 
 #include <TensorFlowLite.h>
@@ -112,7 +98,7 @@ void debounce() {
             CLASS_TRAINING++;
             if (CLASS_TRAINING == CLASSES)
               CLASS_TRAINING = 0;
-          }                             
+          }                 
         }
       }
     }
@@ -142,7 +128,6 @@ void RunCV(int action){
   if (inByte == FACE_DETECTED){
     digitalWrite(LED_G, HIGH);
     digitalWrite(LED_R, LOW);
-    LEDTimeout = millis();
     Serial.println("CMD: STREAM LOGITS");
     StreamLogits();
     if (action == 0){//Classify
@@ -175,6 +160,7 @@ void RunCV(int action){
       }
       Serial.println(personStr);
     }
+    LEDTimeout = millis();
   }
   else if (inByte == FACE_NOT_DETECTED){
     Serial.println("NANO-> No face detected");

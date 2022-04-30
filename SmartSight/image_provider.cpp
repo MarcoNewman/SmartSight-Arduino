@@ -42,7 +42,7 @@
 // JPEG data received from the Arducam module
 #define MAX_JPEG_BYTES 40000
 // The pin connected to the Arducam Chip Select
-#define CS 7
+#define CS 2
 
 // Camera library instance
 ArduCAM myCAM(OV2640, CS);
@@ -62,6 +62,8 @@ TfLiteStatus InitCamera(tflite::ErrorReporter* error_reporter) {
   digitalWrite(CS, HIGH);
   // initialize SPI
   SPI.begin();
+  //Bump the clock to 8MHz. Appears to be the maximum.
+  SPI.beginTransaction(SPISettings(80000000, MSBFIRST, SPI_MODE0));
   // Reset the CPLD
   myCAM.write_reg(0x07, 0x80);
   delay(100);
@@ -80,6 +82,8 @@ TfLiteStatus InitCamera(tflite::ErrorReporter* error_reporter) {
   // a resolution smaller than the full sensor frame
   myCAM.set_format(JPEG);
   myCAM.InitCAM();
+  //myCAM.OV2640_set_Light_Mode(Advanced_AWB);
+  //myCAM.OV2640_set_Brightness(6);
   // Store Large Image in FIFO buffer parsing.
   myCAM.OV2640_set_JPEG_size(OV2640_640x480);
   delay(100);
@@ -147,7 +151,7 @@ int InitializeCamera(tflite::ErrorReporter* error_reporter){
 
 // Get an image from the camera module
 uint32_t GetImage(tflite::ErrorReporter* error_reporter, uint8_t* image_data) {
-
+  cameraInitialized = InitializeCamera(error_reporter);
   TfLiteStatus capture_status = PerformCapture(error_reporter);
   if (capture_status != kTfLiteOk) {
     TF_LITE_REPORT_ERROR(error_reporter, "PerformCapture failed");

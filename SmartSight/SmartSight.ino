@@ -5,6 +5,9 @@
 
 #include <Arduino_KNN.h>
 
+#include "HyperDisplay_UG2856KLBAG01.h"
+#include <Wire.h>
+
 #include "image_provider.h"
 
 #define noOfButtons 3     //Exactly what it says; must be the same as the number of elements in buttonPins
@@ -31,23 +34,28 @@ namespace {
   const int CLASSES = 6;
   int CLASS_TRAINING = 0;
   KNNClassifier KNN(1001);
+  int DETECTED = 0;
 
   // Control & IO
-  const int LED_G = 2;
-  const int LED_R = 3;     // set ledPin to on-board LED
+  const int LED_G = 7;
+  const int LED_R = 6;     // set ledPin to on-board LED
   double LEDTimeout;
 
-  const int PB_CLASSIFY = 4;
-  const int PB_TRAIN = 5;
-  const int PB_SELECT = 6;
+  const int PB_CLASSIFY = 3;
+  const int PB_TRAIN = 4;
+  const int PB_SELECT = 5;
 
-  const int buttonPins[] = {4, 5, 6};      // Input pins to use, connect buttons between these pins and 0V
+  const int buttonPins[] = {3, 4, 5};      // Input pins to use, connect buttons between these pins and 0V
   uint32_t previousMillis[noOfButtons];       // Timers to time out bounce duration for each button
   uint8_t pressCount[noOfButtons];            // Counts the number of times the button is detected as pressed, when this count reaches minButtonPress button is regared as debounced 
 
   // Status
   const int FACE_DETECTED = 0;
   const int FACE_NOT_DETECTED = 1;
+
+  UG2856KLBAG01_I2C myTOLED;
+  bool newDetection = false;
+  bool newClass = true;
 
 }  // namespace
   
@@ -56,6 +64,9 @@ void setup() {
   
   Serial.begin(500000);
   while (!Serial) ;
+
+  pinMode(10, OUTPUT);
+  digitalWrite(10, HIGH);
 
   pinMode(LED_G, OUTPUT);
   pinMode(LED_R, OUTPUT);
@@ -68,6 +79,18 @@ void setup() {
 
   camera_status = InitializeCamera(error_reporter);
 
+  Wire.begin();
+  myTOLED.begin(Wire, false, SSD1309_ARD_UNUSED_PIN);  // Begin for I2C has default values for every argument
+  Wire.setClock(400000);
+
+  myTOLED.windowClear();
+  myTOLED.setWindowColorSet();
+  myTOLED.setTextCursor(5,5);
+  myTOLED.print("Train:");
+  myTOLED.setTextCursor(5,35);
+  myTOLED.print("Detected:");
+
+  Serial.println("SETUP COMPLETE");
 }
 
 // The name of this function is important for Arduino compatibility.
@@ -77,7 +100,20 @@ void loop() {
     digitalWrite(LED_R, LOW);
     digitalWrite(LED_G, LOW);
   }
-  delay(10);
+  if (newClass){
+    char* personStr = DecodeNames(CLASS_TRAINING);
+    myTOLED.rectangleClear(0, 15, 128, 23, true);
+    myTOLED.setTextCursor(10,15);
+    myTOLED.print(personStr);
+    newClass = false;
+  }
+  if (newDetection){
+    char* personStr = DecodeNames(DETECTED);
+    myTOLED.rectangleClear(0, 45, 128, 53, true);
+    myTOLED.setTextCursor(10,45);
+    myTOLED.print(personStr);
+    newDetection = false;
+  }
 }
 
 void debounce() {
@@ -95,6 +131,7 @@ void debounce() {
           if (i < 2){
             RunCV(i);
           } else {
+            newClass = true;
             CLASS_TRAINING++;
             if (CLASS_TRAINING == CLASSES)
               CLASS_TRAINING = 0;
@@ -131,17 +168,10 @@ void RunCV(int action){
     Serial.println("CMD: STREAM LOGITS");
     StreamLogits();
     if (action == 0){//Classify
-      int classification = KNN.classify(logits,3);
+      DETECTED = KNN.classify(logits,3);
+      newDetection = true;
       Serial.print("NANO-> Classification: ");
-      char* personStr;
-      switch (classification){
-        case 0: personStr = "Marco"; break;
-        case 1: personStr = "Zach"; break;
-        case 2: personStr = "Caleb"; break;
-        case 3: personStr = "Veronika"; break;
-        case 4: personStr = "Nisha"; break;
-        case 5: personStr = "NEW PERSON"; break;
-      }
+      char* personStr = DecodeNames(DETECTED);
       Serial.println(personStr);
       Serial.print("NANO-> Confidence: ");
       Serial.println(KNN.confidence());
@@ -149,15 +179,7 @@ void RunCV(int action){
     else if (action == 1){//Train
       KNN.addExample(logits, CLASS_TRAINING);
       Serial.print("NANO-> Training for: ");
-      char* personStr;
-      switch (CLASS_TRAINING){
-        case 0: personStr = "Marco"; break;
-        case 1: personStr = "Zach"; break;
-        case 2: personStr = "Caleb"; break;
-        case 3: personStr = "Veronika"; break;
-        case 4: personStr = "Nisha"; break;
-        case 5: personStr = "NEW PERSON"; break;
-      }
+      char* personStr = DecodeNames(CLASS_TRAINING);
       Serial.println(personStr);
     }
     LEDTimeout = millis();
@@ -196,4 +218,17 @@ void StreamLogits(){
     }
   }
   Serial.println("NANO-> Logits Received");
+}
+
+char* DecodeNames(int num){
+  char* name;
+  switch (num){
+    case 0: name = "Marco"; break;
+    case 1: name = "Zach"; break;
+    case 2: name = "Caleb"; break;
+    case 3: name = "Veronika"; break;
+    case 4: name = "Nisha"; break;
+    case 5: name = "NEW"; break;
+  }
+  return name;
 }

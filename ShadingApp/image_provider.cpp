@@ -59,7 +59,7 @@ limitations under the License.
 // JPEG data received from the Arducam module
 #define MAX_JPEG_BYTES 5500
 // The pin connected to the Arducam Chip Select
-#define CS 7
+#define CS 2
 
 // Camera library instance
 ArduCAM myCAM(OV2640, CS);
@@ -80,6 +80,9 @@ TfLiteStatus InitCamera(tflite::ErrorReporter* error_reporter) {
   digitalWrite(CS, HIGH);
   // initialize SPI
   SPI.begin();
+  //Bump the clock to 8MHz. Appears to be the maximum.
+  SPI.beginTransaction(SPISettings(8000000, MSBFIRST, SPI_MODE0));
+  
   // Reset the CPLD
   myCAM.write_reg(0x07, 0x80);
   delay(100);
@@ -87,6 +90,7 @@ TfLiteStatus InitCamera(tflite::ErrorReporter* error_reporter) {
   delay(100);
   // Test whether we can communicate with Arducam via SPI
   myCAM.write_reg(ARDUCHIP_TEST1, 0x55);
+  delay(100);
   uint8_t test;
   test = myCAM.read_reg(ARDUCHIP_TEST1);
   if (test != 0x55) {

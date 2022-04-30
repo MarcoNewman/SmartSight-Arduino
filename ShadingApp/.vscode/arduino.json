@@ -1,5 +1,5 @@
 {
     "sketch": "ShadingApp.ino",
-    "port": "/dev/ttyACM43",
+    "port": "/dev/ttyACM21",
     "board": "arduino:mbed_nano:nano33ble"
 }

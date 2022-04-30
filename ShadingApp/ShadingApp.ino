@@ -129,8 +129,8 @@ void loop() {
     //Serial.println("CMD: STREAM IMAGE");
     //StreamImage();
   }
-  //Serial.print("NANO-> LOOP END IN: ");
-  //Serial.println(millis() - loopTime);
+  Serial.print("NANO-> LOOP END IN: ");
+  Serial.println(millis() - loopTime);
   //while (millis() < loopTime + 5000);
 }
 

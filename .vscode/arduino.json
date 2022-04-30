@@ -1,6 +1,6 @@
 {
     "board": "arduino:mbed_nano:nano33ble",
     "programmer": "arduino:stlink",
-    "sketch": "SmartSight.ino",
-    "port": "/dev/ttyACM24"
+    "sketch": "SmartSight/SmartSight.ino",
+    "port": "/dev/ttyACM48"
 }
